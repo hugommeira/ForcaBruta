@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>[ MATRIX ] — BRUTE FORCE DEMO</title>
+  <title>FORÇA BRUTA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=VT323&display=swap" rel="stylesheet">
   <style>
@@ -1068,7 +1068,7 @@ code {
        HEADER
   ═══════════════════════════════════════ -->
   <header class="site-header">
-    <h1 class="site-title" data-text="[ BRUTE FORCE ]">[ BRUTE FORCE ]</h1>
+    <h1 class="site-title" data-text="[ FORÇA BRUTA ]">[ FORÇA BRUTA ]</h1>
     <p class="site-sub">SHA-256 · MULTI-THREAD · WEB WORKERS · OFFLINE</p>
     <span class="boot-line">&gt; SISTEMA INICIALIZADO. PROCESSAMENTO 100% LOCAL. NÃO USE SENHAS REAIS.</span>
   </header>
@@ -1277,7 +1277,7 @@ Tempo      : 0.0 s
   </div><!-- /.grid -->
 
   <footer class="site-footer">
-    <span>© 2025 BRUTE FORCE DEMO</span>
+    <span>© 2025 FORÇA BRUTA</span>
     <span>100% OFFLINE · SEM ENVIO DE DADOS</span>
   </footer>
 
