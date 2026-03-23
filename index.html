@@ -1,0 +1,2220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FORÇA BRUTA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=VT323&display=swap" rel="stylesheet">
+  <style>
+/* ══════════════════════════════════════════════
+   TOKENS — variáveis globais de design
+══════════════════════════════════════════════ */
+:root {
+  --black:         #000000;
+  --green:         #00ff41;
+  --green-mid:     #00cc33;
+  --green-dim:     #007a1f;
+  --green-dark:    #004010;
+  --green-ghost:   rgba(0, 255, 65, 0.06);
+  --green-glow:    rgba(0, 255, 65, 0.30);
+  --green-glow-sm: rgba(0, 255, 65, 0.12);
+  --red:           #ff0044;
+  --red-bg:        rgba(255, 0, 68, 0.10);
+  --warn:          #ffaa00;
+  --found:         #00ff99;
+  --font-mono:     'JetBrains Mono', 'Courier New', monospace;
+  --font-display:  'VT323', 'Courier New', monospace;
+}
+
+/* ══════════════════════════════════════════════
+   RESET
+══════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body { height: 100%; }
+
+/* ══════════════════════════════════════════════
+   BASE
+══════════════════════════════════════════════ */
+body {
+  font-family: var(--font-mono);
+  background: var(--black);
+  color: var(--green);
+  min-height: 100%;
+  overflow-x: hidden;
+  cursor: crosshair;
+}
+
+/* Efeitos de tela CRT — sobrepostos ao canvas */
+body::before {
+  /* Scanlines */
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent    0px,
+    transparent    2px,
+    rgba(0,0,0,.15) 2px,
+    rgba(0,0,0,.15) 3px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+body::after {
+  /* Vinheta radial */
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,.82) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Canvas da chuva matrix */
+#matrix-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════════ */
+.wrap {
+  position: relative;
+  z-index: 10;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 20px 50px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+/* ══════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════ */
+.site-header {
+  text-align: center;
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--green-dark);
+}
+
+.site-header::before {
+  content: '';
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%, var(--green-dim) 20%,
+    var(--green) 50%, var(--green-dim) 80%,
+    transparent 100%);
+  margin-bottom: 22px;
+  box-shadow: 0 0 12px var(--green-glow);
+}
+
+.site-title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 6vw, 72px);
+  letter-spacing: 0.15em;
+  color: var(--green);
+  text-shadow: 0 0 6px var(--green), 0 0 20px var(--green-glow), 0 0 50px rgba(0,255,65,.2);
+  line-height: 1;
+  position: relative;
+  animation: glitch 6s infinite;
+}
+
+/* Pseudo-elementos do efeito glitch */
+.site-title::before,
+.site-title::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+}
+.site-title::before {
+  color: #00ffcc;
+  text-shadow: -2px 0 var(--red);
+  clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%);
+  animation: glitch-top 6s infinite;
+}
+.site-title::after {
+  color: var(--red);
+  text-shadow: 2px 0 #00ffcc;
+  clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%);
+  animation: glitch-bot 6s infinite;
+}
+
+.site-sub {
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: var(--green-dim);
+  margin-top: 10px;
+}
+
+.boot-line {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--green-dim);
+  letter-spacing: 0.06em;
+  margin-top: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 0;
+  animation: typeout 2.5s steps(60) 0.5s forwards;
+}
+
+/* ══════════════════════════════════════════════
+   PAINÉIS
+══════════════════════════════════════════════ */
+.panel {
+  background: rgba(0, 8, 0, 0.82);
+  border: 1px solid var(--green-dark);
+  position: relative;
+  padding: 20px 18px 18px;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 0 0 1px rgba(0,255,65,.04), inset 0 0 30px rgba(0,0,0,.4);
+  animation: panel-boot 0.6s ease both;
+}
+
+.panel:nth-child(2) { animation-delay: 0.2s; }
+
+/* Borda superior com glow */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent, var(--green-dim) 30%,
+    var(--green) 50%, var(--green-dim) 70%, transparent);
+  animation: border-pulse 3s ease-in-out infinite;
+}
+
+/* Canto inferior-direito decorativo */
+.panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 12px; height: 12px;
+  border-bottom: 1px solid var(--green-dim);
+  border-right: 1px solid var(--green-dim);
+}
+
+/* Canto superior-esquerdo decorativo */
+.panel-corner {
+  position: absolute;
+  top: 0; left: 0;
+  width: 12px; height: 12px;
+  border-top: 1px solid var(--green-dim);
+  border-left: 1px solid var(--green-dim);
+}
+
+/* Etiqueta no topo do painel */
+.panel-tag {
+  position: absolute;
+  top: -1px; left: 18px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--black);
+  background: var(--green-dim);
+  padding: 1px 8px;
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════════
+   SEÇÕES INTERNAS
+══════════════════════════════════════════════ */
+.sec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--green-dim);
+  margin: 18px 0 8px;
+}
+.sec:first-child { margin-top: 0; }
+.sec::before { content: '//'; color: var(--green); font-weight: bold; }
+.sec::after  { content: ''; flex: 1; height: 1px; background: var(--green-dark); }
+
+/* ══════════════════════════════════════════════
+   FORMULÁRIOS
+══════════════════════════════════════════════ */
+.field { margin-top: 12px; }
+
+.field-lbl {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green-dim);
+  margin-bottom: 5px;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  padding: 8px 11px;
+  background: rgba(0, 6, 0, 0.9);
+  border: 1px solid var(--green-dark);
+  border-left: 2px solid var(--green-dim);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  caret-color: var(--green);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--green-mid);
+  border-left-color: var(--green);
+  box-shadow: 0 0 10px var(--green-glow-sm), inset 0 0 8px rgba(0,255,65,.04);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 90px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+select {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2300cc33'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+select option { background: #001200; }
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* Grupo de checkboxes */
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 8px;
+}
+
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--green-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+.chk:hover { color: var(--green); }
+
+.chk input[type="checkbox"] {
+  appearance: none;
+  width: 13px; height: 13px;
+  border: 1px solid var(--green-dark);
+  background: var(--black);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.chk input:checked {
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 6px var(--green-glow);
+}
+
+.chk input:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--black);
+  line-height: 13px;
+  text-align: center;
+}
+
+.chk input:checked + span { color: var(--green); }
+
+/* Fieldset estilizado */
+.fset {
+  border: 1px solid var(--green-dark);
+  border-left: 2px solid var(--green-dark);
+  padding: 12px 13px 14px;
+  margin-top: 12px;
+  position: relative;
+  background: rgba(0, 4, 0, 0.5);
+}
+
+.fset-leg {
+  position: absolute;
+  top: -7px; left: 10px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--green-dim);
+  background: rgba(0, 8, 0, 0.95);
+  padding: 0 8px;
+}
+
+.wl-ctrl {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ══════════════════════════════════════════════
+   BOTÕES
+══════════════════════════════════════════════ */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  padding: 9px 20px;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+/* Efeito de scan no hover */
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,65,.15), transparent);
+  transition: left 0.4s ease;
+}
+.btn:hover::before { left: 150%; }
+
+.btn:disabled        { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+/* Variantes */
+.btn-primary {
+  color: var(--black);
+  background: var(--green-mid);
+  border-color: var(--green);
+  box-shadow: 0 0 12px var(--green-glow), inset 0 0 6px rgba(0,255,65,.1);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--green);
+  box-shadow: 0 0 24px var(--green), 0 0 48px var(--green-glow);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  color: var(--green-dim);
+  border-color: var(--green-dark);
+  font-size: 11px;
+  padding: 6px 12px;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--green);
+  border-color: var(--green-dim);
+  background: var(--green-ghost);
+}
+
+.btn-stop {
+  color: var(--red);
+  border-color: var(--red);
+}
+.btn-stop:hover:not(:disabled) {
+  background: var(--red-bg);
+  box-shadow: 0 0 12px rgba(255,0,68,.3);
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+/* ══════════════════════════════════════════════
+   ALERTA
+══════════════════════════════════════════════ */
+.alert {
+  display: flex;
+  gap: 10px;
+  border: 1px solid var(--red);
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+  padding: 9px 12px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #ff6688;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+.alert i { color: var(--red); font-style: normal; font-size: 14px; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════
+   STATUS + LOG
+══════════════════════════════════════════════ */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: rgba(0, 6, 0, 0.9);
+  border: 1px solid var(--green-dark);
+  border-bottom: none;
+  min-height: 34px;
+}
+
+.status-dot {
+  width: 7px; height: 7px;
+  flex-shrink: 0;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--green);
+  animation: dot-idle 2s ease-in-out infinite;
+}
+.status-dot.running { animation: dot-run 0.3s ease-in-out infinite alternate; }
+
+#status {
+  flex: 1;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--green-mid);
+}
+
+#log {
+  background: rgba(0, 4, 0, 0.95);
+  border: 1px solid var(--green-dark);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--green-dim);
+  min-height: 88px;
+  overflow: auto;
+  white-space: pre-wrap;
+  position: relative;
+}
+#log::after {
+  content: '█';
+  font-size: 11px;
+  color: var(--green);
+  animation: blink 1s step-end infinite;
+}
+
+/* ══════════════════════════════════════════════
+   BARRA DE PROGRESSO
+══════════════════════════════════════════════ */
+.progress-wrap {
+  margin-top: 8px;
+  height: 3px;
+  background: var(--green-dark);
+  overflow: hidden;
+}
+
+#progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  transition: width 0.3s ease;
+  position: relative;
+}
+#progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 40px; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,65,.8));
+  animation: bar-scan 1s linear infinite;
+}
+
+/* ══════════════════════════════════════════════
+   DISPLAY DE CANDIDATO (visualização do ataque)
+══════════════════════════════════════════════ */
+.candidate-display {
+  display: none;
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: rgba(0, 6, 0, 0.95);
+  border: 1px solid var(--green-dark);
+  border-left: 2px solid var(--green-dim);
+  position: relative;
+  overflow: hidden;
+}
+.candidate-display.visible { display: block; }
+.candidate-display::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green-dim), transparent);
+  animation: border-pulse 2s ease-in-out infinite;
+}
+
+.cand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--green-dark);
+}
+
+.cand-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cand-pulse {
+  width: 5px; height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 5px var(--green);
+  animation: dot-run 0.3s ease-in-out infinite alternate;
+}
+
+#cand-count {
+  font-size: 10px;
+  color: var(--green-dim);
+}
+
+.cand-chars {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-height: 44px;
+  align-items: center;
+}
+
+.cand-char {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 40px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0;
+  border: 1px solid var(--green-dark);
+  background: rgba(0, 4, 0, 0.8);
+  color: var(--green-dim);
+  position: relative;
+  transition: all 0.12s ease;
+}
+.cand-char.active {
+  color: var(--green);
+  border-color: var(--green-dim);
+  background: rgba(0, 20, 0, 0.9);
+  box-shadow: 0 0 8px var(--green-glow-sm);
+  animation: char-flash 0.15s ease-in-out infinite alternate;
+}
+.cand-char.fixed {
+  color: var(--green);
+  border-color: var(--green);
+  background: rgba(0, 30, 0, 0.9);
+  box-shadow: 0 0 10px var(--green-glow);
+  text-shadow: 0 0 8px var(--green);
+}
+.cand-char.found {
+  color: var(--found);
+  border-color: var(--found);
+  background: rgba(0, 40, 20, 0.95);
+  box-shadow: 0 0 14px rgba(0,255,153,.4);
+  text-shadow: 0 0 10px var(--found);
+  animation: found-pulse 0.6s ease-in-out infinite alternate;
+}
+
+/* ══════════════════════════════════════════════
+   ANALISADOR DE SENHA
+══════════════════════════════════════════════ */
+.pwd-analyzer {
+  display: none; /* exibido via JS ao digitar */
+  margin-top: 10px;
+  padding: 10px 13px 12px;
+  border: 1px solid var(--green-dark);
+  border-left: 2px solid var(--green-dim);
+  background: rgba(0, 4, 0, 0.7);
+}
+
+.analyzer-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.strength-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green-dim);
+  white-space: nowrap;
+}
+
+.strength-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: var(--green-dark);
+  overflow: hidden;
+}
+
+.strength-bar {
+  height: 100%;
+  width: 0%;
+  transition: width 0.4s ease, background 0.4s ease;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.strength-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+}
+
+.analyzer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+
+.az-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.az-key {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--green-dark);
+  text-transform: uppercase;
+}
+
+.az-val           { font-size: 12px; color: var(--green-dim); font-weight: 500; }
+.az-val.highlight { color: var(--green); }
+.az-val.warn      { color: var(--warn); }
+.az-val.danger    { color: var(--red); }
+
+/* ══════════════════════════════════════════════
+   SIDEBAR — BARRA DE WORKERS
+══════════════════════════════════════════════ */
+.threads-wrap {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 4, 0, 0.7);
+  border: 1px solid var(--green-dark);
+}
+
+.threads-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--green-dark);
+}
+
+#workerCount { font-size: 12px; color: var(--green-dim); }
+
+#worker-bar {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.worker-dot {
+  width: 18px; height: 5px;
+  background: var(--green-dark);
+  transition: background 0.1s, box-shadow 0.1s;
+}
+.worker-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: wdot 0.4s ease-in-out infinite alternate;
+}
+
+/* Meta da wordlist */
+.meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--green-dark);
+}
+
+/* ══════════════════════════════════════════════
+   SIDEBAR — GUIA
+══════════════════════════════════════════════ */
+.man-block           { margin-top: 16px; }
+.man-block:first-child { margin-top: 0; }
+
+.man-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--green-dim);
+  margin-bottom: 9px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--green-dark);
+}
+.man-title::before { content: '>'; color: var(--green); font-weight: bold; }
+
+.man-ol {
+  list-style: none;
+  counter-reset: steps;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.man-ol li {
+  counter-increment: steps;
+  font-size: 13px;
+  color: var(--green-dim);
+  line-height: 1.6;
+}
+.man-ol li::before {
+  content: counter(steps, decimal-leading-zero) '.';
+  font-size: 11px;
+  color: var(--green-dark);
+  margin-right: 6px;
+}
+
+.man-ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.man-ul li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  color: var(--green-dim);
+  line-height: 1.5;
+}
+.man-ul li::before {
+  content: '─';
+  position: absolute;
+  left: 0;
+  color: var(--green-dark);
+}
+.man-ul li strong,
+.man-ol li strong { color: var(--green-mid); }
+
+/* Tabela de specs */
+.spec-tbl { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.spec-tbl td {
+  padding: 5px 6px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--green-dark);
+  vertical-align: top;
+}
+.spec-tbl td:first-child {
+  color: var(--green-dark);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.spec-tbl td:last-child { color: var(--green-dim); }
+.spec-tbl td strong    { color: var(--green-mid); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--green);
+  background: rgba(0,255,65,.07);
+  border: 1px solid var(--green-dark);
+  padding: 1px 5px;
+}
+
+/* ══════════════════════════════════════════════
+   PAINEL EDUCACIONAL
+══════════════════════════════════════════════ */
+.edu-insight {
+  margin-top: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--green-dark);
+  border-left: 2px solid var(--green-dim);
+  background: rgba(0, 4, 0, 0.6);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--green-dim);
+}
+.edu-insight strong        { color: var(--green); }
+.edu-insight .danger       { color: var(--red);   font-weight: 700; }
+.edu-insight .warn         { color: var(--warn);  font-weight: 700; }
+.edu-insight .good         { color: var(--found); font-weight: 700; }
+
+.edu-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.edu-col {
+  padding: 9px 11px;
+  border: 1px solid var(--green-dark);
+  background: rgba(0, 2, 0, 0.7);
+}
+
+.edu-col-title {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--green-dark);
+}
+.edu-col-title.bad  { color: var(--red);   }
+.edu-col-title.good { color: var(--found); }
+
+.edu-col-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--green-dim);
+  margin-top: 5px;
+}
+.edu-col-row span:last-child { color: var(--green-mid); font-weight: 600; }
+
+.edu-entropy-bar {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--green-dark);
+  background: rgba(0, 2, 0, 0.7);
+}
+
+.edu-entropy-title {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--green-dark);
+  margin-bottom: 8px;
+}
+
+.entropy-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.entropy-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 70px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.entropy-row-pwd  { color: var(--green-mid); }
+.entropy-row-time { color: var(--green-dim); font-size: 10px; text-align: right; }
+
+.entropy-fill-wrap {
+  height: 4px;
+  background: var(--green-dark);
+  overflow: hidden;
+}
+.entropy-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+/* ══════════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════════ */
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid var(--green-dark);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green-dark);
+}
+
+/* ══════════════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════════════ */
+::-webkit-scrollbar       { width: 5px; }
+::-webkit-scrollbar-track { background: var(--black); }
+::-webkit-scrollbar-thumb { background: var(--green-dark); }
+::-webkit-scrollbar-thumb:hover { background: var(--green-dim); }
+
+/* ══════════════════════════════════════════════
+   ANIMAÇÕES
+══════════════════════════════════════════════ */
+@keyframes glitch {
+  0%, 92%, 100% { transform: none; text-shadow: 0 0 6px var(--green), 0 0 20px var(--green-glow); }
+  93% { transform: skewX(-4deg) translateX(3px);  text-shadow: -3px 0 var(--red), 3px 0 #00ffcc; }
+  94% { transform: skewX(3deg)  translateX(-2px); }
+  95% { transform: none; }
+  96% { transform: translateX(4px); }
+  97% { transform: none; }
+}
+
+@keyframes glitch-top {
+  0%, 92%, 100% { opacity: 0; transform: none; }
+  93% { opacity: 1;   transform: translateX(-3px); }
+  94% { opacity: 0.8; transform: translateX(2px);  }
+  95% { opacity: 0; }
+}
+
+@keyframes glitch-bot {
+  0%, 94%, 100% { opacity: 0; transform: none; }
+  95% { opacity: 1;   transform: translateX(4px);  }
+  96% { opacity: 0.7; transform: translateX(-2px); }
+  97% { opacity: 0; }
+}
+
+@keyframes typeout    { from { width: 0; }    to { width: 100%; } }
+@keyframes blink      { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes char-flash { from { opacity: 0.7; } to { opacity: 1; } }
+@keyframes wdot       { from { opacity: 0.6; } to { opacity: 1; } }
+
+@keyframes panel-boot {
+  from { opacity: 0; transform: translateY(8px); filter: brightness(3); }
+  to   { opacity: 1; transform: none;            filter: brightness(1); }
+}
+
+@keyframes border-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1;   }
+}
+
+@keyframes dot-idle {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 4px var(--green); }
+  50%       { opacity: 0.4; box-shadow: none; }
+}
+
+@keyframes dot-run {
+  from { opacity: 0.6; box-shadow: 0 0 4px var(--green); }
+  to   { opacity: 1;   box-shadow: 0 0 10px var(--green), 0 0 20px var(--green-glow); }
+}
+
+@keyframes found-pulse {
+  from { box-shadow: 0 0 8px  rgba(0,255,153,.3); }
+  to   { box-shadow: 0 0 20px rgba(0,255,153,.7); }
+}
+
+@keyframes bar-scan {
+  from { transform: translateX(-40px); }
+  to   { transform: translateX(0); }
+}
+
+/* ══════════════════════════════════════════════
+   RESPONSIVO
+══════════════════════════════════════════════ */
+@media (max-width: 860px) {
+  .wrap  { padding: 16px 14px 40px; }
+  .grid  { grid-template-columns: 1fr; }
+  .row2  { grid-template-columns: 1fr; }
+  h1.site-title { font-size: 38px; }
+}
+  </style>
+</head>
+<body>
+
+<!-- Canvas da chuva matrix -->
+<canvas id="matrix-canvas"></canvas>
+
+<div class="wrap">
+
+  <!-- ═══════════════════════════════════════
+       HEADER
+  ═══════════════════════════════════════ -->
+  <header class="site-header">
+    <h1 class="site-title" data-text="[ FORÇA BRUTA ]">[ FORÇA BRUTA ]</h1>
+    <p class="site-sub">SHA-256 · MULTI-THREAD · WEB WORKERS · OFFLINE</p>
+    <span class="boot-line">&gt; SISTEMA INICIALIZADO. PROCESSAMENTO 100% LOCAL. NÃO USE SENHAS REAIS.</span>
+  </header>
+
+  <!-- ═══════════════════════════════════════
+       GRID PRINCIPAL
+  ═══════════════════════════════════════ -->
+  <div class="grid">
+
+    <!-- ── PAINEL SIMULADOR (esquerda) ── -->
+    <main class="panel">
+      <div class="panel-corner"></div>
+      <span class="panel-tag">Simulador</span>
+
+      <!-- Campo de senha + analisador -->
+      <div class="sec">Teste sua senha</div>
+      <div class="field">
+        <label class="field-lbl" for="pwd">Digite uma senha para testar</label>
+        <input id="pwd" type="password"
+               placeholder="ex: abc123  (máx. 8 caracteres)"
+               maxlength="8" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div id="pwd-analyzer" class="pwd-analyzer">
+        <div class="analyzer-strength">
+          <span class="strength-label">Segurança:</span>
+          <div class="strength-bar-wrap">
+            <div id="strength-bar" class="strength-bar"></div>
+          </div>
+          <span id="strength-name" class="strength-name">—</span>
+        </div>
+        <div class="analyzer-grid">
+          <div class="az-item">
+            <span class="az-key">Dificuldade</span>
+            <span class="az-val" id="az-entropy">—</span>
+          </div>
+          <div class="az-item">
+            <span class="az-key">Combinações possíveis</span>
+            <span class="az-val" id="az-combos">—</span>
+          </div>
+          <div class="az-item">
+            <span class="az-key">Tipos de caractere</span>
+            <span class="az-val" id="az-charset">—</span>
+          </div>
+          <div class="az-item">
+            <span class="az-key">Tempo para quebrar</span>
+            <span class="az-val" id="az-eta">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Configurações do ataque -->
+      <div class="row2">
+        <div class="field">
+          <label class="field-lbl" for="maxlen">Testar até quantos caracteres?</label>
+          <input id="maxlen" type="number" min="1" max="8" value="6">
+        </div>
+        <div class="field">
+          <label class="field-lbl" for="modeSelect">Tipo de ataque</label>
+          <select id="modeSelect">
+            <option value="bruteforce">Força Bruta — todas as combinações</option>
+            <option value="dictionary">Senhas Comuns — palavras frequentes</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Charset -->
+      <div class="fset">
+        <span class="fset-leg">Quais tipos de caractere testar?</span>
+        <div class="check-group">
+          <label class="chk"><input type="checkbox" id="lower"   checked><span>letras minúsculas (a–z)</span></label>
+          <label class="chk"><input type="checkbox" id="upper">          <span>letras maiúsculas (A–Z)</span></label>
+          <label class="chk"><input type="checkbox" id="digits"  checked><span>números (0–9)</span></label>
+          <label class="chk"><input type="checkbox" id="symbols">        <span>símbolos (!@#$...)</span></label>
+        </div>
+      </div>
+
+      <!-- Dicionário (oculto por padrão, exibido via JS) -->
+      <div id="dictSection" class="fset" style="display:none">
+        <span class="fset-leg">Lista de senhas comuns</span>
+        <div class="wl-ctrl">
+          <input id="wordfile" type="file" accept="text/plain"
+                 style="font-size:12px;max-width:160px;color:var(--green-dim)">
+          <button id="loadBuilt" class="btn btn-ghost">▸ Carregar senhas comuns</button>
+          <button id="clearWL"   class="btn btn-ghost">✕ Limpar</button>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label class="field-lbl" for="wordArea">Senhas a testar (uma por linha)</label>
+          <textarea id="wordArea" placeholder="palavra1&#10;palavra2&#10;..."></textarea>
+        </div>
+        <div class="meta">
+          <span id="wlCount">0 palavras</span>
+          <span id="wlSource">nenhuma</span>
+        </div>
+      </div>
+
+      <!-- Ações -->
+      <div class="action-row">
+        <button id="start" class="btn btn-primary">▶ Iniciar ataque</button>
+        <button id="stop"  class="btn btn-stop btn-ghost" disabled>■ Parar</button>
+      </div>
+
+      <!-- Aviso educacional -->
+      <div class="alert">
+        <i>⚠</i>
+        <span>APENAS FINS EDUCACIONAIS. ATAQUES REAIS SÃO ILEGAIS E ANTIÉTICOS. NÃO USE SENHAS REAIS.</span>
+      </div>
+
+      <!-- Resultado / output -->
+      <div class="sec" style="margin-top:18px">Resultado</div>
+
+      <div class="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status">Pronto — digite uma senha e clique em Iniciar</span>
+      </div>
+
+      <!-- Visualização do candidato atual -->
+      <div id="candidate-display" class="candidate-display">
+        <div class="cand-header">
+          <div class="cand-header-left">
+            <div class="cand-pulse"></div>
+            <span>Testando agora</span>
+          </div>
+          <span id="cand-count"></span>
+        </div>
+        <div class="cand-chars" id="cand-chars"></div>
+      </div>
+
+      <pre id="log">Tentativas : 0
+Tempo      : 0.0 s
+&gt; Aguardando...</pre>
+
+      <div class="progress-wrap">
+        <div id="progress-bar"></div>
+      </div>
+
+      <!-- Núcleos de CPU -->
+      <div class="threads-wrap">
+        <div class="threads-head">
+          <span>Núcleos de CPU em uso</span>
+          <span id="workerCount">—</span>
+        </div>
+        <div id="worker-bar"></div>
+      </div>
+
+    </main>
+
+    <!-- ── PAINEL GUIA (direita) ── -->
+    <aside class="panel">
+      <div class="panel-corner"></div>
+      <span class="panel-tag">Guia</span>
+
+      <!-- O que isso significa? (primeiro, mais relevante) -->
+      <div class="man-block">
+        <div class="man-title">O que isso significa?</div>
+        <div class="edu-insight" id="edu-insight-main">
+          Digite uma senha acima para ver a análise em tempo real.
+        </div>
+
+        <div class="edu-compare">
+          <div class="edu-col">
+            <div class="edu-col-title bad">✗ Senha fraca</div>
+            <div class="edu-col-row"><span>Senha</span>      <span id="edu-weak-pwd">P@ss1</span></div>
+            <div class="edu-col-row"><span>Tipos</span>      <span id="edu-weak-chars">—</span></div>
+            <div class="edu-col-row"><span>Dificuldade</span><span id="edu-weak-entropy">—</span></div>
+            <div class="edu-col-row"><span>Tempo</span>      <span id="edu-weak-time">—</span></div>
+          </div>
+          <div class="edu-col">
+            <div class="edu-col-title good">✓ Senha forte</div>
+            <div class="edu-col-row"><span>Senha</span>      <span id="edu-strong-pwd">cavalo-bateria</span></div>
+            <div class="edu-col-row"><span>Tipos</span>      <span id="edu-strong-chars">—</span></div>
+            <div class="edu-col-row"><span>Dificuldade</span><span id="edu-strong-entropy">—</span></div>
+            <div class="edu-col-row"><span>Tempo</span>      <span id="edu-strong-time">—</span></div>
+          </div>
+        </div>
+
+        <div class="edu-entropy-bar">
+          <div class="edu-entropy-title">Comparação com senhas reais — tempo para quebrar</div>
+          <div class="entropy-examples" id="entropy-examples"></div>
+        </div>
+      </div>
+
+      <!-- Como usar -->
+      <div class="man-block">
+        <div class="man-title">Como usar</div>
+        <ol class="man-ol">
+          <li>Digite uma senha curta no campo ao lado — ex. <code>abc123</code></li>
+          <li>Escolha os tipos de caractere a testar</li>
+          <li>Escolha o tipo de ataque</li>
+          <li>Pressione <strong>Iniciar ataque</strong> e veja acontecer</li>
+        </ol>
+      </div>
+
+      <!-- Modo dicionário -->
+      <div class="man-block">
+        <div class="man-title">Modo de senhas comuns</div>
+        <ul class="man-ul">
+          <li>Carregue um arquivo <code>.txt</code> com uma senha por linha</li>
+          <li>Ou cole as senhas diretamente na caixa de texto</li>
+          <li>Clique em <strong>"Carregar senhas comuns"</strong> para usar uma lista pronta</li>
+        </ul>
+      </div>
+
+    </aside>
+
+  </div><!-- /.grid -->
+
+  <footer class="site-footer">
+    <span>© 2025 FORÇA BRUTA</span>
+    <span>100% OFFLINE · SEM ENVIO DE DADOS</span>
+  </footer>
+
+</div><!-- /.wrap -->
+
+<!-- Checkbox oculto — ponte entre o select de modo e a lógica JS -->
+<input id="useDictionary" type="checkbox" style="display:none">
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: MATRIX RAIN
+   Canvas animado com colunas de caracteres caindo
+═══════════════════════════════════════════════════════════ */
+(function initMatrixRain() {
+  const canvas = document.getElementById('matrix-canvas');
+  const ctx    = canvas.getContext('2d');
+  const CHARS  = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789ABCDEF<>[]{}|\\/-_=+*&^%$#@!?';
+  const FONT_SIZE = 14;
+  let cols, drops, W, H;
+
+  function resize() {
+    W     = canvas.width  = window.innerWidth;
+    H     = canvas.height = window.innerHeight;
+    cols  = Math.floor(W / FONT_SIZE);
+    drops = Array.from({ length: cols }, () => Math.random() * -50);
+  }
+
+  function draw() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.055)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.font = `${FONT_SIZE}px 'JetBrains Mono', monospace`;
+
+    for (let i = 0; i < drops.length; i++) {
+      const y  = drops[i] * FONT_SIZE;
+      const ch = CHARS[Math.floor(Math.random() * CHARS.length)];
+
+      if (y > 0) {
+        const brightness = Math.random() * 0.5 + 0.3;
+        ctx.fillStyle = `rgba(0, ${Math.floor(180 + brightness * 75)}, ${Math.floor(brightness * 60)}, ${brightness})`;
+        ctx.fillText(ch, i * FONT_SIZE, y);
+      }
+
+      if (y > H && Math.random() > 0.975) drops[i] = 0;
+      drops[i] += 0.5;
+    }
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  setInterval(draw, 40); // ~25 fps
+}());
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: BARRA DE PROGRESSO
+═══════════════════════════════════════════════════════════ */
+let progressTimer = null;
+let progressPct   = 0;
+
+function startProgressAnim() {
+  const bar = document.getElementById('progress-bar');
+  const dot = document.getElementById('status-dot');
+  progressPct = 0;
+  bar.style.width = '0%';
+  dot.className   = 'status-dot running';
+
+  progressTimer = setInterval(() => {
+    if (progressPct < 90) {
+      progressPct += (90 - progressPct) * 0.008;
+      bar.style.width = progressPct + '%';
+    }
+  }, 80);
+}
+
+function finishProgress(found) {
+  clearInterval(progressTimer);
+  const bar   = document.getElementById('progress-bar');
+  const color = found ? 'var(--green)' : 'var(--red)';
+  bar.style.transition = 'width 0.4s ease';
+  bar.style.width      = '100%';
+  bar.style.background = color;
+  bar.style.boxShadow  = `0 0 12px ${color}`;
+  document.getElementById('status-dot').className = 'status-dot';
+  setTimeout(() => {
+    bar.style.width      = '0%';
+    bar.style.background = '';
+    bar.style.boxShadow  = '';
+  }, 2500);
+}
+
+function resetProgress() {
+  clearInterval(progressTimer);
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('status-dot').className = 'status-dot';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: TOGGLE MODO DICIONÁRIO
+═══════════════════════════════════════════════════════════ */
+document.getElementById('modeSelect').addEventListener('change', function () {
+  const isDictionary = this.value === 'dictionary';
+  document.getElementById('dictSection').style.display = isDictionary ? 'block' : 'none';
+  document.getElementById('useDictionary').checked = isDictionary;
+});
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: UTILITÁRIOS DE ANÁLISE DE SENHA
+═══════════════════════════════════════════════════════════ */
+
+/** Velocidade medida em H/s — atualizada durante execução */
+let measuredSpeed = 500_000;
+
+/**
+ * Estima o tamanho do charset com base nos tipos de caractere presentes.
+ * @param {string} pwd
+ * @returns {number}
+ */
+function detectCharsetSize(pwd) {
+  let size = 0;
+  if (/[a-z]/.test(pwd))       size += 26;
+  if (/[A-Z]/.test(pwd))       size += 26;
+  if (/[0-9]/.test(pwd))       size += 10;
+  if (/[^a-zA-Z0-9]/.test(pwd)) size += 32;
+  return size || 26;
+}
+
+/**
+ * Calcula a entropia em bits: comprimento × log₂(charset).
+ * @param {string} pwd
+ * @returns {number}
+ */
+function calcEntropy(pwd) {
+  if (!pwd) return 0;
+  return pwd.length * Math.log2(detectCharsetSize(pwd));
+}
+
+/**
+ * Calcula o número total de combinações até o comprimento da senha
+ * (soma charset^1 + charset^2 + ... + charset^len).
+ * @param {string} pwd
+ * @returns {number}
+ */
+function calcCombos(pwd) {
+  const cs = detectCharsetSize(pwd);
+  let total = 0;
+  for (let i = 1; i <= pwd.length; i++) total += Math.pow(cs, i);
+  return total;
+}
+
+/**
+ * Formata número grande para leitura humana em português.
+ * @param {number} n
+ * @returns {string}
+ */
+function fmtBig(n) {
+  if (n < 1e3)  return n.toLocaleString('pt-BR');
+  if (n < 1e6)  return (n / 1e3).toFixed(1)  + ' mil';
+  if (n < 1e9)  return (n / 1e6).toFixed(1)  + ' milhões';
+  if (n < 1e12) return (n / 1e9).toFixed(1)  + ' bilhões';
+  if (n < 1e15) return (n / 1e12).toFixed(1) + ' trilhões';
+  return              (n / 1e15).toFixed(1)  + ' quadrilhões';
+}
+
+/**
+ * Formata tempo em segundos para frase legível.
+ * @param {number} seconds
+ * @returns {string}
+ */
+function fmtTime(seconds) {
+  if (!isFinite(seconds) || seconds > 1e15) return '> universo';
+  if (seconds < 0.001)  return '< 1ms';
+  if (seconds < 1)      return (seconds * 1000).toFixed(0) + 'ms';
+  if (seconds < 60)     return seconds.toFixed(1) + 's';
+  if (seconds < 3_600)  return (seconds / 60).toFixed(1) + 'min';
+  if (seconds < 86_400) return (seconds / 3_600).toFixed(1) + 'h';
+  if (seconds < 31_536_000)       return Math.ceil(seconds / 86_400) + ' dias';
+  if (seconds < 31_536_000_000)   return Math.ceil(seconds / 31_536_000) + ' anos';
+  return '> mil anos';
+}
+
+/**
+ * Classifica a força de uma senha pela entropia.
+ * @param {number} entropy
+ * @returns {{ name: string, pct: number, color: string }}
+ */
+function classifyStrength(entropy) {
+  if (entropy < 28) return { name: 'Crítica',   pct: 8,   color: '#ff0044' };
+  if (entropy < 40) return { name: 'Fraca',     pct: 25,  color: '#ff6600' };
+  if (entropy < 55) return { name: 'Média',     pct: 55,  color: '#ffaa00' };
+  if (entropy < 70) return { name: 'Forte',     pct: 80,  color: '#00cc33' };
+  return                    { name: 'Excelente', pct: 100, color: '#00ff99' };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: ANALISADOR DE SENHA (tempo real)
+═══════════════════════════════════════════════════════════ */
+
+/**
+ * Atualiza o painel de análise de senha ao vivo.
+ * Chamado a cada keystroke no campo de senha.
+ * @param {string} pwd
+ */
+function updateAnalyzer(pwd) {
+  const wrap = document.getElementById('pwd-analyzer');
+  if (!pwd) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  const entropy = calcEntropy(pwd);
+  const combos  = calcCombos(pwd);
+  const str     = classifyStrength(entropy);
+  const eta     = combos / measuredSpeed;
+
+  // Barra de força
+  const bar  = document.getElementById('strength-bar');
+  const name = document.getElementById('strength-name');
+  bar.style.width      = str.pct + '%';
+  bar.style.background = str.color;
+  bar.style.color      = str.color;
+  name.textContent     = str.name;
+  name.style.color     = str.color;
+
+  // Dificuldade (texto humano)
+  const entropyEl  = document.getElementById('az-entropy');
+  const levelMap   = [
+    [28, 'Muito baixa', 'danger'],
+    [40, 'Baixa',       'danger'],
+    [55, 'Moderada',    'warn'],
+    [70, 'Alta',        'highlight'],
+    [Infinity, 'Muito alta', 'highlight'],
+  ];
+  const [, diffText, diffClass] = levelMap.find(([threshold]) => entropy < threshold);
+  entropyEl.textContent = diffText;
+  entropyEl.className   = 'az-val ' + diffClass;
+
+  // Combinações
+  document.getElementById('az-combos').textContent = fmtBig(combos) + ' senhas possíveis';
+
+  // Tipos de caractere detectados na senha
+  const charParts = [];
+  if (/[a-z]/.test(pwd))        charParts.push('minúsculas');
+  if (/[A-Z]/.test(pwd))        charParts.push('maiúsculas');
+  if (/[0-9]/.test(pwd))        charParts.push('números');
+  if (/[^a-zA-Z0-9]/.test(pwd)) charParts.push('símbolos');
+  document.getElementById('az-charset').textContent = charParts.join(', ') || 'letras';
+
+  // ETA (texto humano contextual)
+  const etaEl  = document.getElementById('az-eta');
+  const etaMap = [
+    [0.001,              'Menos de 1 milissegundo', 'danger'],
+    [1,                  'Menos de 1 segundo',       'danger'],
+    [60,                 'Menos de 1 minuto',        'danger'],
+    [3_600,              () => `Cerca de ${Math.ceil(eta / 60)} minutos`,    'warn'],
+    [86_400,             () => `Cerca de ${Math.ceil(eta / 3_600)} horas`,   'warn'],
+    [365 * 86_400,       () => `Cerca de ${Math.ceil(eta / 86_400)} dias`,   'highlight'],
+    [1000 * 365 * 86_400,() => `Cerca de ${Math.ceil(eta / (365*86_400))} anos`, 'highlight'],
+    [Infinity,           'Mais que mil anos',        'highlight'],
+  ];
+  const [, etaText, etaClass] = etaMap.find(([threshold]) => eta < threshold);
+  etaEl.textContent = typeof etaText === 'function' ? etaText() : etaText;
+  etaEl.className   = 'az-val ' + etaClass;
+
+  updateEduPanel(pwd, entropy, combos);
+}
+
+document.getElementById('pwd').addEventListener('input', function () {
+  updateAnalyzer(this.value);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: PAINEL EDUCACIONAL
+═══════════════════════════════════════════════════════════ */
+
+/** Exemplos de senhas reais para a escala de entropia */
+const ENTROPY_EXAMPLES = [
+  { label: '123456',              bits: 20,  time: 0.00001 },
+  { label: 'senha123',            bits: 38,  time: 0.3     },
+  { label: 'P@ssw0rd',            bits: 52,  time: 600     },
+  { label: 'xK9#mPqR2!vL',        bits: 79,  time: 8e8     },
+  { label: 'cavalo-bateria',      bits: 91,  time: 3e12    },
+  { label: '4 palavras aleatórias', bits: 128, time: 1e25   },
+];
+
+const MAX_ENTROPY_BITS = 128;
+
+/** Reconstrói a escala de entropia com os tempos ajustados à velocidade medida. */
+function buildEntropyScale() {
+  const wrap = document.getElementById('entropy-examples');
+  wrap.innerHTML = ENTROPY_EXAMPLES.map(({ label, bits, time }) => {
+    const pct   = Math.round((bits / MAX_ENTROPY_BITS) * 100);
+    const color = bits < 35 ? '#ff0044' : bits < 50 ? '#ff6600' : bits < 65 ? '#ffaa00' : '#00cc33';
+    const tAdj  = fmtTime(time / (measuredSpeed / 500_000));
+    return `<div class="entropy-row">
+      <span class="entropy-row-pwd">${label}</span>
+      <div class="entropy-fill-wrap">
+        <div class="entropy-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <span class="entropy-row-time">${tAdj}</span>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Atualiza o insight educacional e a comparação fraca vs. forte.
+ * @param {string} pwd
+ * @param {number} entropy
+ * @param {number} combos
+ */
+function updateEduPanel(pwd, entropy, combos) {
+  const eta     = combos / measuredSpeed;
+  const insight = document.getElementById('edu-insight-main');
+
+  const insightMap = [
+    [28, () => `<span class="danger">⚠ Senha muito fraca:</span> existem apenas <strong>${fmtBig(combos)}</strong> senhas possíveis como essa. Um computador comum quebraria em <strong class="danger">menos de um segundo</strong>. Nunca use senhas assim.`],
+    [40, () => `<span class="warn">⚠ Senha fraca:</span> com <strong>${fmtBig(combos)}</strong> combinações possíveis, um ataque conseguiria descobri-la em aproximadamente <strong class="warn">${fmtTime(eta)}</strong>. Adicione mais caracteres ou tipos diferentes.`],
+    [55, () => `<span class="warn">⚡ Senha razoável:</span> há <strong>${fmtBig(combos)}</strong> combinações possíveis — resistente a ataques simples, mas computadores potentes podem descobri-la em <strong class="warn">${fmtTime(eta)}</strong>.`],
+    [70, () => `<span class="good">✓ Senha forte:</span> com <strong>${fmtBig(combos)}</strong> combinações possíveis, levaria aproximadamente <strong class="good">${fmtTime(eta)}</strong> para ser descoberta. Boa para uso pessoal.`],
+    [Infinity, () => `<span class="good">✓✓ Senha excelente:</span> <strong>${fmtBig(combos)}</strong> combinações possíveis. Levaria <strong class="good">${fmtTime(eta)}</strong> para descobrir — na prática, impossível de quebrar.`],
+  ];
+  insight.innerHTML = insightMap.find(([threshold]) => entropy < threshold)[1]();
+
+  // Comparação fixa: senha fraca (P@ss1) vs. senha forte (cavalo-bateria)
+  const WEAK_PWD   = 'P@ss1';
+  const STRONG_PWD = 'cavalo-bateria';
+
+  const weakEnt   = calcEntropy(WEAK_PWD);
+  const strongEnt = calcEntropy(STRONG_PWD);
+
+  const toLabel = (e) => e < 40 ? 'Baixa' : e < 55 ? 'Moderada' : 'Alta';
+
+  document.getElementById('edu-weak-chars').textContent    = 'letras + números + símbolos';
+  document.getElementById('edu-weak-entropy').textContent  = toLabel(weakEnt);
+  document.getElementById('edu-weak-time').textContent     = fmtTime(calcCombos(WEAK_PWD)   / measuredSpeed);
+  document.getElementById('edu-strong-chars').textContent  = 'apenas letras e hífen';
+  document.getElementById('edu-strong-entropy').textContent = toLabel(strongEnt);
+  document.getElementById('edu-strong-time').textContent   = fmtTime(calcCombos(STRONG_PWD) / measuredSpeed);
+
+  buildEntropyScale();
+}
+
+// Inicializa a escala na carga da página
+buildEntropyScale();
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO: DISPLAY VISUAL DO CANDIDATO
+   Exibe cada caractere da senha sendo testada em caixas
+   individuais animadas, com prefixo fixo em verde.
+═══════════════════════════════════════════════════════════ */
+
+let lastCandidate  = '';
+let candidateTotal = 0;
+
+/**
+ * Inicializa as caixas de caractere com o tamanho da senha-alvo.
+ * @param {string} targetPwd
+ */
+function initCandidateDisplay(targetPwd) {
+  const display = document.getElementById('candidate-display');
+  const chars   = document.getElementById('cand-chars');
+  display.classList.add('visible');
+  chars.innerHTML = Array.from({ length: targetPwd.length }, (_, i) =>
+    `<div class="cand-char" id="cc-${i}">?</div>`
+  ).join('');
+  lastCandidate  = '';
+  candidateTotal = 0;
+}
+
+/**
+ * Atualiza as caixas com o candidato atual.
+ * Detecta o prefixo comum para mostrar apenas o dígito que mudou.
+ * @param {string} candidate
+ */
+function updateCandidateDisplay(candidate) {
+  if (!candidate) return;
+
+  candidateTotal++;
+  document.getElementById('cand-count').textContent =
+    candidateTotal.toLocaleString('pt-BR') + ' neste núcleo';
+
+  const chars = document.getElementById('cand-chars');
+  if (!chars) return;
+
+  // Recria caixas se o comprimento mudou (novo ciclo de length)
+  if (chars.querySelectorAll('.cand-char').length !== candidate.length) {
+    chars.innerHTML = Array.from({ length: candidate.length }, (_, i) =>
+      `<div class="cand-char" id="cc-${i}">?</div>`
+    ).join('');
+  }
+
+  // Determina o prefixo comum com o candidato anterior
+  let commonLen = 0;
+  while (commonLen < Math.min(lastCandidate.length, candidate.length) &&
+         lastCandidate[commonLen] === candidate[commonLen]) {
+    commonLen++;
+  }
+
+  for (let i = 0; i < candidate.length; i++) {
+    const box = document.getElementById('cc-' + i);
+    if (!box) continue;
+    if (i < commonLen) {
+      box.className   = 'cand-char fixed';
+      box.textContent = candidate[i];
+    } else if (i === commonLen) {
+      box.className   = 'cand-char active';
+      box.textContent = candidate[i];
+    } else {
+      box.className   = 'cand-char';
+      box.textContent = '?';
+    }
+  }
+
+  lastCandidate = candidate;
+}
+
+/**
+ * Acende todas as caixas em verde — senha encontrada.
+ * @param {string} password
+ */
+function showCandidateFound(password) {
+  const chars = document.getElementById('cand-chars');
+  if (!chars) return;
+  chars.innerHTML = Array.from(password, (ch, i) =>
+    `<div class="cand-char found" id="cc-${i}">${ch}</div>`
+  ).join('');
+  document.getElementById('cand-count').textContent = 'ENCONTRADA!';
+}
+
+/** Oculta o display e zera o estado. */
+function clearCandidateDisplay() {
+  document.getElementById('candidate-display')?.classList.remove('visible');
+  lastCandidate  = '';
+  candidateTotal = 0;
+}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MÓDULO: WORKER — SHA-256 + FORÇA BRUTA + DICIONÁRIO
+     Embutido via Blob URL para funcionar sem servidor.
+     SHA-256 puro síncrono: zero await, loop direto de CPU.
+════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ── Código do Web Worker (string → Blob URL) ── */
+const WORKER_SRC = `
+'use strict';
+
+/* Constantes K do SHA-256 (frações cúbicas dos primeiros 64 primos) */
+const K = new Uint32Array([
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+]);
+
+/* Buffer de schedule reutilizável — evita alocação a cada hash */
+const W = new Uint32Array(64);
+
+/**
+ * SHA-256 síncrono puro em JS.
+ * Otimizado para strings curtas (até 8 chars): reutiliza W,
+ * sem arrays intermediários, serialização hex inline.
+ * @param {string} str
+ * @returns {string} hash hex de 64 chars
+ */
+function sha256(str) {
+  /* Codifica UTF-8 */
+  const raw = [];
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if      (c < 0x80)  raw.push(c);
+    else if (c < 0x800) raw.push(0xc0|(c>>6), 0x80|(c&0x3f));
+    else                raw.push(0xe0|(c>>12), 0x80|((c>>6)&0x3f), 0x80|(c&0x3f));
+  }
+
+  /* Padding Merkle–Damgård */
+  const bitLen = raw.length * 8;
+  raw.push(0x80);
+  while ((raw.length % 64) !== 56) raw.push(0);
+  raw.push(0,0,0,0, (bitLen>>>24)&0xff, (bitLen>>>16)&0xff, (bitLen>>>8)&0xff, bitLen&0xff);
+
+  /* Estado inicial (raízes quadradas dos 8 primeiros primos) */
+  let h0=0x6a09e667, h1=0xbb67ae85, h2=0x3c6ef372, h3=0xa54ff53a;
+  let h4=0x510e527f, h5=0x9b05688c, h6=0x1f83d9ab, h7=0x5be0cd19;
+
+  /* Compressão por blocos de 64 bytes */
+  for (let off = 0; off < raw.length; off += 64) {
+    for (let i = 0; i < 16; i++) {
+      const b = off + i*4;
+      W[i] = (raw[b]<<24)|(raw[b+1]<<16)|(raw[b+2]<<8)|raw[b+3];
+    }
+    for (let i = 16; i < 64; i++) {
+      const w15 = W[i-15], w2 = W[i-2];
+      const s0  = ((w15>>>7)|(w15<<25)) ^ ((w15>>>18)|(w15<<14)) ^ (w15>>>3);
+      const s1  = ((w2>>>17) |(w2<<15))  ^ ((w2>>>19) |(w2<<13))  ^ (w2>>>10);
+      W[i] = (W[i-16] + s0 + W[i-7] + s1) >>> 0;
+    }
+    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1  = ((e>>>6)|(e<<26)) ^ ((e>>>11)|(e<<21)) ^ ((e>>>25)|(e<<7));
+      const ch  = (e&f) ^ (~e&g);
+      const t1  = (h + S1 + ch + K[i] + W[i]) >>> 0;
+      const S0  = ((a>>>2)|(a<<30)) ^ ((a>>>13)|(a<<19)) ^ ((a>>>22)|(a<<10));
+      const maj = (a&b) ^ (a&c) ^ (b&c);
+      const t2  = (S0 + maj) >>> 0;
+      h=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
+    }
+    h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0;
+    h4=(h4+e)>>>0; h5=(h5+f)>>>0; h6=(h6+g)>>>0; h7=(h7+h)>>>0;
+  }
+
+  let hex = '';
+  for (const v of [h0,h1,h2,h3,h4,h5,h6,h7]) hex += ('00000000'+v.toString(16)).slice(-8);
+  return hex;
+}
+
+/* Avança o odômetro de índices para a próxima combinação */
+function nextIndices(idx, base) {
+  for (let i = idx.length-1; i >= 0; i--) {
+    if (++idx[i] < base) return true;
+    idx[i] = 0;
+  }
+  return false;
+}
+
+/* Converte array de índices em string candidata */
+function indicesToStr(idx, charset) {
+  let s = '';
+  for (let i = 0; i < idx.length; i++) s += charset[idx[i]];
+  return s;
+}
+
+/* Posiciona o odômetro diretamente na posição linear (O(len)) */
+function posToIndices(pos, len, base, out) {
+  let rem = pos;
+  for (let i = len-1; i >= 0; i--) {
+    out[i] = rem % base;
+    rem    = Math.floor(rem / base);
+  }
+}
+
+const REPORT_EVERY = 3000;
+
+self.onmessage = function ({ data }) {
+  const { type, targetHash, charset, maxLen, workerIndex, totalWorkers, words } = data;
+
+  if (type === 'dictionary') {
+    let attempts = 0;
+    for (let i = workerIndex; i < words.length; i += totalWorkers) {
+      attempts++;
+      if (sha256(words[i]) === targetHash) {
+        self.postMessage({ type: 'found', password: words[i], attempts });
+        return;
+      }
+      if (attempts % REPORT_EVERY === 0)
+        self.postMessage({ type: 'progress', attempts, candidate: words[i] });
+    }
+    self.postMessage({ type: 'done', attempts });
+    return;
+  }
+
+  /* Força bruta: cada worker cobre uma faixa do espaço de busca */
+  const base  = charset.length;
+  let   total = 0;
+
+  for (let len = 1; len <= maxLen; len++) {
+    const spaceSize = Math.pow(base, len);
+    const chunk     = Math.ceil(spaceSize / totalWorkers);
+    const start     = workerIndex * chunk;
+    const end       = Math.min(start + chunk, spaceSize);
+    if (start >= spaceSize) continue;
+
+    const idx = new Uint8Array(len);
+    posToIndices(start, len, base, idx);
+
+    for (let p = start; p < end; p++) {
+      const candidate = indicesToStr(idx, charset);
+      total++;
+      if (sha256(candidate) === targetHash) {
+        self.postMessage({ type: 'found', password: candidate, attempts: total });
+        return;
+      }
+      if (total % REPORT_EVERY === 0)
+        self.postMessage({ type: 'progress', attempts: total, candidate });
+      nextIndices(idx, base);
+    }
+  }
+  self.postMessage({ type: 'done', attempts: total });
+};
+`;
+
+/* ── Constantes da thread principal ── */
+const MAX_PASSWORD_LENGTH = 8;
+const NUM_WORKERS         = Math.min(navigator.hardwareConcurrency || 4, 16);
+const WORKER_URL          = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'application/javascript' }));
+
+const BUILT_IN_WORDS = [
+  '123456','password','12345','11223','abc123',
+  'senha','admin','felipe123','131313','pedro123',
+  '666666','1234567','matheus123','gabriel123','futebol',
+  '111111','flamengo','deusefiel','password1',
+];
+
+const CHARSETS = {
+  lower:   'abcdefghijklmnopqrstuvwxyz',
+  upper:   'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  digits:  '0123456789',
+  symbols: '!@#$%^&*()-_=+[]{};:,.<>?/',
+};
+
+/* ── Utilitários da thread principal ── */
+const ENCODER = new TextEncoder();
+
+/**
+ * SHA-256 via SubtleCrypto — usado apenas para calcular o hash-alvo uma vez.
+ * @param {string} str
+ * @returns {Promise<string>}
+ */
+async function sha256Hex(str) {
+  const digest = await crypto.subtle.digest('SHA-256', ENCODER.encode(str));
+  const bytes  = new Uint8Array(digest);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+  return hex;
+}
+
+/**
+ * Monta o charset selecionado pelo usuário.
+ * @returns {string}
+ * @throws {Error} se nenhum tipo estiver selecionado
+ */
+function buildCharset() {
+  const cs = Object.entries(CHARSETS)
+    .filter(([id]) => document.getElementById(id).checked)
+    .map(([, chars]) => chars)
+    .join('');
+  if (!cs) throw new Error('Selecione pelo menos um tipo de caractere.');
+  return cs;
+}
+
+/**
+ * Lê um arquivo .txt e retorna as linhas não-vazias.
+ * @param {File} file
+ * @returns {Promise<string[]>}
+ */
+async function readWordFile(file) {
+  return (await file.text()).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+}
+
+/** Retorna segundos decorridos desde t0. */
+function elapsed(t0) { return (performance.now() - t0) / 1000; }
+
+/* ── Orquestrador de Workers ── */
+
+/**
+ * Lança NUM_WORKERS em paralelo, cada um cobrindo uma faixa.
+ * Resolve na primeira senha encontrada ou quando todos terminam.
+ * @param {'bruteforce'|'dictionary'} type
+ * @param {{ targetHash: string, charset?: string, maxLen?: number, words?: string[] }} params
+ * @param {(total: number, secs: number, candidate: string) => void} onProgress
+ * @param {{ stopped: boolean }} signal
+ * @returns {Promise<{ found: boolean, password?: string, attempts: number, elapsed: number }>}
+ */
+function runWorkers(type, params, onProgress, signal) {
+  return new Promise(resolve => {
+    const workers       = [];
+    const workerAttempts = new Array(NUM_WORKERS).fill(0);
+    const t0            = performance.now();
+    let   finished      = 0;
+    let   resolved      = false;
+
+    const totalAttempts = () => workerAttempts.reduce((a, b) => a + b, 0);
+
+    const finish = (result) => {
+      if (resolved) return;
+      resolved = true;
+      workers.forEach(w => w.terminate());
+      resolve(result);
+    };
+
+    for (let i = 0; i < NUM_WORKERS; i++) {
+      const workerIdx = i;
+      const worker    = new Worker(WORKER_URL);
+      workers.push(worker);
+
+      worker.onmessage = ({ data: msg }) => {
+        if (resolved) return;
+
+        if (msg.type === 'progress') {
+          workerAttempts[workerIdx] = msg.attempts;
+          updateDot(workerIdx, true);
+          onProgress(totalAttempts(), elapsed(t0), msg.candidate);
+          if (signal.stopped)
+            finish({ found: false, attempts: totalAttempts(), elapsed: elapsed(t0) });
+          return;
+        }
+
+        if (msg.type === 'found') {
+          workerAttempts[workerIdx] = msg.attempts;
+          finish({ found: true, password: msg.password, attempts: totalAttempts(), elapsed: elapsed(t0) });
+          return;
+        }
+
+        /* 'done' */
+        workerAttempts[workerIdx] = msg.attempts;
+        updateDot(workerIdx, false);
+        if (++finished === NUM_WORKERS)
+          finish({ found: false, attempts: totalAttempts(), elapsed: elapsed(t0) });
+      };
+
+      worker.onerror = () => {
+        if (++finished === NUM_WORKERS && !resolved)
+          finish({ found: false, attempts: totalAttempts(), elapsed: elapsed(t0) });
+      };
+
+      worker.postMessage({
+        type,
+        targetHash:   params.targetHash,
+        charset:      params.charset || '',
+        maxLen:       params.maxLen  || 0,
+        words:        params.words   || [],
+        workerIndex:  workerIdx,
+        totalWorkers: NUM_WORKERS,
+      });
+    }
+  });
+}
+
+/* ── Referências ao DOM ── */
+const el = {
+  pwd:           document.getElementById('pwd'),
+  maxLen:        document.getElementById('maxlen'),
+  useDictionary: document.getElementById('useDictionary'),
+  wordfile:      document.getElementById('wordfile'),
+  wordArea:      document.getElementById('wordArea'),
+  wlCount:       document.getElementById('wlCount'),
+  wlSource:      document.getElementById('wlSource'),
+  loadBuilt:     document.getElementById('loadBuilt'),
+  clearWL:       document.getElementById('clearWL'),
+  startBtn:      document.getElementById('start'),
+  stopBtn:       document.getElementById('stop'),
+  status:        document.getElementById('status'),
+  log:           document.getElementById('log'),
+  workerBar:     document.getElementById('worker-bar'),
+  workerCount:   document.getElementById('workerCount'),
+};
+
+const signal  = { stopped: false };
+let   running = false;
+
+/* ── Gerenciamento da barra de workers ── */
+function initWorkerBar() {
+  el.workerCount.textContent = NUM_WORKERS;
+  el.workerBar.innerHTML     = Array.from({ length: NUM_WORKERS }, (_, i) =>
+    `<div class="worker-dot" id="wd-${i}" title="Worker ${i + 1}"></div>`
+  ).join('');
+}
+
+function updateDot(i, active) {
+  document.getElementById(`wd-${i}`)?.classList.toggle('active', active);
+}
+
+function setAllDots(active) {
+  for (let i = 0; i < NUM_WORKERS; i++) updateDot(i, active);
+}
+
+/* ── Helpers de UI ── */
+function setLog(text) {
+  el.log.textContent = text;
+  el.log.scrollTop   = el.log.scrollHeight;
+}
+
+function setStatus(msg) {
+  el.status.textContent = msg;
+  setLog(el.log.textContent + '\n' + msg);
+}
+
+function onProgress(total, secs, candidate) {
+  const speed = Math.round(total / Math.max(secs, 0.01));
+
+  // Atualiza velocidade medida para calibrar o analisador e painel educacional
+  if (speed > 0) {
+    measuredSpeed = speed;
+    const pwd = el.pwd.value;
+    if (pwd) updateAnalyzer(pwd);
+    buildEntropyScale();
+  }
+
+  updateCandidateDisplay(candidate);
+
+  setLog(
+    `Senhas testadas: ${total.toLocaleString('pt-BR')}  |  Tempo: ${secs.toFixed(2)} s\n` +
+    `Velocidade: ~${speed.toLocaleString('pt-BR')} tentativas/s  |  ${NUM_WORKERS} núcleos\n` +
+    `Testando agora: ${candidate}`
+  );
+}
+
+function showResult(result, method) {
+  let msg;
+  if (result.found) {
+    const spd = Math.round(result.attempts / Math.max(result.elapsed, 0.001));
+    msg = `✔ Senha encontrada (${method}): '${result.password}'\n` +
+          `  Tempo: ${result.elapsed.toFixed(3)} s  |  ` +
+          `${result.attempts.toLocaleString('pt-BR')} senhas testadas  |  ` +
+          `~${spd.toLocaleString('pt-BR')} tentativas/s`;
+    finishProgress(true);
+    showCandidateFound(result.password);
+  } else if (signal.stopped) {
+    msg = `⏹ Parado. ${result.attempts.toLocaleString('pt-BR')} senhas testadas em ${result.elapsed.toFixed(2)} s`;
+    finishProgress(false);
+    clearCandidateDisplay();
+  } else {
+    msg = `✘ Senha não encontrada. ${result.attempts.toLocaleString('pt-BR')} combinações testadas em ${result.elapsed.toFixed(2)} s`;
+    finishProgress(false);
+    clearCandidateDisplay();
+  }
+  setStatus(msg);
+  setAllDots(false);
+}
+
+function setRunningState() {
+  running              = true;
+  signal.stopped       = false;
+  el.startBtn.disabled = true;
+  el.stopBtn.disabled  = false;
+  setAllDots(true);
+  startProgressAnim();
+}
+
+function setIdleState() {
+  running              = false;
+  signal.stopped       = false;
+  el.startBtn.disabled = false;
+  el.stopBtn.disabled  = true;
+  setAllDots(false);
+}
+
+function getWordlist() {
+  return el.wordArea.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+}
+
+function refreshWordlistMeta() {
+  el.wlCount.textContent = getWordlist().length + ' palavras';
+}
+
+/* ── Event handlers ── */
+el.startBtn.addEventListener('click', async () => {
+  if (running) return;
+
+  const pwd = el.pwd.value.trim();
+  if (!pwd) { alert('Digite uma senha para a demo.'); return; }
+  if (pwd.length > MAX_PASSWORD_LENGTH) {
+    alert(`Use senhas de até ${MAX_PASSWORD_LENGTH} caracteres para esta demo.`);
+    return;
+  }
+
+  let charset, maxLen;
+  try {
+    charset = buildCharset();
+    maxLen  = Math.max(1, Math.min(MAX_PASSWORD_LENGTH, parseInt(el.maxLen.value) || 6));
+  } catch (err) { alert(err.message); return; }
+
+  const useDict = el.useDictionary.checked;
+
+  setRunningState();
+  initCandidateDisplay(pwd);
+  setLog('Iniciando...');
+  el.status.textContent = 'Preparando o ataque...';
+
+  try {
+    const targetHash = await sha256Hex(pwd);
+
+    if (useDict) {
+      const words = getWordlist();
+      if (!words.length) { alert('Wordlist vazia.'); setIdleState(); return; }
+      el.status.textContent = `Testando senhas comuns usando ${NUM_WORKERS} núcleos...`;
+      showResult(
+        await runWorkers('dictionary', { targetHash, words }, onProgress, signal),
+        'dicionário'
+      );
+    } else {
+      el.status.textContent = `Testando todas as combinações usando ${NUM_WORKERS} núcleos...`;
+      showResult(
+        await runWorkers('bruteforce', { targetHash, charset, maxLen }, onProgress, signal),
+        'força bruta'
+      );
+    }
+  } catch (err) {
+    const msg = 'Erro: ' + (err.message || String(err));
+    el.status.textContent = msg;
+    setLog(msg);
+    resetProgress();
+  } finally {
+    setIdleState();
+  }
+});
+
+el.stopBtn.addEventListener('click', () => {
+  signal.stopped        = true;
+  el.status.textContent = 'Parando...';
+  el.stopBtn.disabled   = true;
+});
+
+el.loadBuilt.addEventListener('click', () => {
+  el.wordArea.value       = BUILT_IN_WORDS.join('\n');
+  el.wlSource.textContent = 'Fonte: embutida';
+  refreshWordlistMeta();
+});
+
+el.clearWL.addEventListener('click', () => {
+  el.wordArea.value       = '';
+  el.wlSource.textContent = 'Fonte: nenhuma';
+  refreshWordlistMeta();
+});
+
+el.wordfile.addEventListener('change', async ({ target: { files } }) => {
+  if (!files[0]) return;
+  try {
+    el.wordArea.value       = (await readWordFile(files[0])).join('\n');
+    el.wlSource.textContent = 'Fonte: arquivo';
+    refreshWordlistMeta();
+  } catch (err) { alert('Erro ao ler arquivo: ' + err.message); }
+});
+
+el.wordArea.addEventListener('input', () => {
+  el.wlSource.textContent = 'Fonte: editado';
+  refreshWordlistMeta();
+});
+
+/* ── Inicialização ── */
+initWorkerBar();
+refreshWordlistMeta();
+el.wlSource.textContent = 'Fonte: nenhuma';
+</script>
+</body>
+</html>
